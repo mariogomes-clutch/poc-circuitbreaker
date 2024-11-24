@@ -12,7 +12,7 @@ const fetchData = async (endpoint: string): Promise<any> => {
 const options = {
     timeout: 3000, // Timeout after 3 seconds
     errorThresholdPercentage: 50, // Open circuit if 50% of requests fail
-    resetTimeout: 5000, // Wait 5 seconds before attempting to close the circuit
+    resetTimeout: 50000, // Wait 5 seconds before attempting to close the circuit
 };
 
 // Create the circuit breaker instance
