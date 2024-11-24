@@ -1,36 +1,76 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Circuit Breaker Testing Guide
 
-## Getting Started
+This guide shows how to test the circuit breaker functionality using predefined healthy and failing endpoints.
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## How to Run the Tests
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+1. **Start the Application**
+   ```bash
+   npm run dev
+   ```
+   The app should be running at `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+2. **Test Healthy Endpoint**
+   ```bash
+   curl "http://localhost:3000/api/testBreaker?endpoint=https://api.github.com/users/octocat/repos"
+   ```
+    - **Expected Behavior**: Returns a list of repositories.
+    - **Circuit State**: `CLOSED` (normal operation).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+   Example Output:
+   ```json
+   [
+     {
+       "id": 1296269,
+       "name": "Hello-World",
+       "full_name": "octocat/Hello-World"
+     }
+   ]
+   ```
 
-## Learn More
+3. **Test Failing Endpoint**
+   ```bash
+   curl "http://localhost:3000/api/testBreaker?endpoint=https://api.invalid-url.com/fail"
+   ```
+    - **Expected Behavior**: After a few failures, the circuit transitions to `OPEN`, blocking requests.
+    - **Circuit State**: `OPEN`.
 
-To learn more about Next.js, take a look at the following resources:
+   Example Output:
+   ```json
+   {
+     "error": "Circuit breaker triggered or API failed."
+   }
+   ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+4. **Simulate Recovery**
+    - Wait for `resetTimeout` (10 seconds by default).
+    - Run the healthy endpoint test again:
+      ```bash
+      curl "http://localhost:3000/api/testBreaker?endpoint=https://api.github.com/users/octocat/repos"
+      ```
+    - **Expected Behavior**:
+        - Circuit transitions to `HALF-OPEN` and sends a test request.
+        - If the test succeeds, the circuit transitions to `CLOSED` and resumes normal operation.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## Circuit States and Behavior
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+| State       | When It Happens                  | Behavior                                                                 |
+|-------------|----------------------------------|--------------------------------------------------------------------------|
+| `CLOSED`    | Endpoint is healthy              | All requests are processed normally.                                     |
+| `OPEN`      | Too many failures                | Requests are blocked immediately, and the fallback response is returned. |
+| `HALF-OPEN` | After reset timeout              | Sends one test request to check if the endpoint has recovered.           |
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+## Configuration Notes
+
+- Adjust circuit breaker settings in `src/utils/circuitBreaker.ts`:
+    - **`timeout`**: Maximum wait time for a request.
+    - **`errorThresholdPercentage`**: Failure percentage to trigger `OPEN`.
+    - **`resetTimeout`**: Time to wait before checking if the endpoint is healthy.
+
+---
